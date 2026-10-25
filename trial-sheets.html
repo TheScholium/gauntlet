@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trial Sheet Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<style>
+/* Layout: a dark control panel on the left, the pages (Istari print palette) on the right.
+   In print, only the pages remain. */
+:root {
+  /* Istari screen palette (panel) */
+  --bg: #12100e;
+  --panel: #1b1814;
+  --line: #2a251d;
+  --text: #d6ccb4;
+  --text-bright: #ebe1c8;
+  --muted: #948b76;
+  --gold: #c4a24d;
+  --warn: #d5978d;
+  /* Pages: black and white */
+  --paper: #ffffff;
+  --ink: #000000;
+  --ink-muted: #333333;
+  --ink-faint: #555555;
+  --p-gold: #000000;
+  --p-rule: #bdbdbd;
+  --p-wash: #ffffff;
+  /* Page geometry, set by script */
+  --pw: 8.5in;
+  --ph: 11in;
+  --fs: 12pt;
+  --serif: 'EB Garamond', 'Iowan Old Style', Palatino, 'Palatino Linotype', Georgia, serif;
+  --display: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--serif); }
+body { font-size: 17px; line-height: 1.5; }
+
+.app { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); min-height: 100vh; }
+.panel {
+  position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding: 20px max(16px, env(safe-area-inset-left, 0px)) 20px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.panel h1 { font-family: var(--display); font-weight: 600; font-size: 28px; margin: 0; color: var(--text-bright); letter-spacing: .01em; }
+.panel h1 small { display: block; font-family: var(--serif); font-size: 14px; font-weight: 400; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+label.lbl { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 4px; }
+textarea {
+  width: 100%; min-height: 320px; flex: 1;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 13px; line-height: 1.55; padding: 10px; resize: vertical; tab-size: 2;
+}
+textarea:focus, select:focus, button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.opts > div { min-width: 0; }
+select {
+  width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+  font-family: var(--serif); font-size: 16px; padding: 6px 8px;
+}
+.check { display: flex; align-items: center; gap: 8px; font-size: 16px; cursor: pointer; }
+.check input { accent-color: var(--gold); width: 16px; height: 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font-family: var(--serif); font-size: 16px; padding: 8px 14px; cursor: pointer;
+  background: transparent; color: var(--text); border: 1px solid var(--line);
+}
+button:hover { border-color: var(--gold); }
+button.cta { background: var(--gold); color: #12100e; border-color: var(--gold); font-weight: 600; }
+button.cta:hover { background: #d3b45f; }
+.status { font-size: 15px; color: var(--muted); min-height: 1.5em; }
+.status b { color: var(--text-bright); font-weight: 500; }
+.status .warn { color: var(--warn); display: block; }
+details { font-size: 15px; color: var(--muted); }
+details summary { cursor: pointer; color: var(--text); }
+details pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); padding: 10px; margin: 8px 0 0; white-space: pre-wrap; color: var(--text); }
+.hint { font-size: 14px; color: var(--muted); }
+
+.preview { padding: 24px max(16px, env(safe-area-inset-right, 0px)); min-width: 0; background: #0d0c0a; }
+.preview-inner { width: max-content; margin: 0 auto; }
+
+/* ---------- Pages ---------- */
+.sheet {
+  width: var(--pw); min-height: calc(var(--ph) - 0.02in);
+  margin: 0 auto 26px; padding: 0.75in 0.8in 0.6in;
+  display: flex; flex-direction: column; gap: 0.2in;
+  background: var(--paper); color: var(--ink);
+  font-family: var(--serif); font-size: var(--fs); line-height: 1.5;
+  box-shadow: 0 2px 14px rgba(0,0,0,.55);
+  break-after: page; page-break-after: always;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.sheet:last-child { break-after: auto; page-break-after: auto; margin-bottom: 0; }
+.sheet .run {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.3in;
+  font-variant: small-caps; letter-spacing: .09em; font-size: .85em; color: var(--p-gold);
+  border-bottom: .5pt solid var(--p-rule); padding-bottom: .07in;
+}
+.box { border: 1pt solid var(--p-gold); break-inside: auto; }
+.box-head {
+  display: flex; align-items: baseline; gap: .16in; flex-wrap: wrap;
+  background: var(--p-wash); border-bottom: .5pt solid var(--p-gold); padding: .09in .18in .07in;
+  font-family: var(--display);
+}
+.box-head .num { font-variant: small-caps; letter-spacing: .1em; font-weight: 600; color: var(--p-gold); font-size: 1.12em; }
+.box-head .ttl { flex: 1; min-width: 0; font-weight: 600; font-size: 1.22em; color: var(--ink); }
+.box-head .pts { font-family: var(--serif); font-size: .9em; color: var(--ink-muted); white-space: nowrap; }
+.box-body { padding: .16in .22in .12in; }
+.box-body p { margin: 0 0 .6em; hyphens: auto; }
+.box-body p:last-child { margin-bottom: 0; }
+.box-body ul, .box-body ol { margin: 0 0 .6em; padding-left: 1.4em; }
+.box-body strong { font-weight: 600; color: #000; }
+.box-body code { font-family: var(--mono); font-size: .86em; background: var(--p-wash); padding: 0 .25em; }
+.part { display: flex; gap: .55em; margin: 0 0 .5em; }
+.part .pl { color: var(--p-gold); font-weight: 600; min-width: 1.6em; }
+.part .pt { flex: 1; min-width: 0; }
+.box-body .katex { font-size: 1.04em; }
+.box-body .katex-display { margin: .5em 0; }
+.box-body .bad { color: #964234; font-family: var(--mono); font-size: .8em; }
+
+.work {
+  flex: 1; min-height: 3in; position: relative;
+}
+.work.ruled { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(.34in - 0.6pt), var(--p-rule) calc(.34in - 0.6pt), var(--p-rule) .34in); background-position: 0 .1in; }
+.work.grid { background-image: radial-gradient(circle, var(--p-rule) 0.7pt, transparent 0.9pt); background-size: .25in .25in; background-position: .12in .12in; }
+.sheet .foot {
+  display: flex; justify-content: space-between; gap: .3in;
+  border-top: .5pt solid var(--p-rule); padding-top: .07in;
+  font-size: .8em; color: var(--ink-faint); font-variant-numeric: lining-nums;
+}
+
+/* Cover */
+.cover { justify-content: flex-start; }
+.cover .c-course { margin-top: 1.3in; font-variant: small-caps; letter-spacing: .16em; color: var(--p-gold); font-size: 1.1em; }
+.cover h2 { font-family: var(--display); font-weight: 600; font-size: 3em; line-height: 1.05; margin: .1em 0 .15em; color: var(--ink); }
+.cover .c-date { color: var(--ink-muted); font-style: italic; }
+.cover .c-rule { height: 1pt; background: var(--p-gold); margin: .3in 0 .25in; width: 100%; }
+.cover .c-note { color: var(--ink-muted); margin-bottom: .25in; max-width: 5.2in; }
+.cover table { border-collapse: collapse; width: 100%; font-size: 1em; }
+.cover th { text-align: left; font-variant: small-caps; letter-spacing: .1em; font-weight: 500; color: var(--p-gold); border-bottom: .5pt solid var(--p-gold); padding: .04in .05in; }
+.cover td { padding: .05in .05in; border-bottom: .5pt solid var(--p-rule); }
+.cover td.n, .cover th.n { width: 1.1in; white-space: nowrap; }
+.cover td.p, .cover th.p { width: .9in; text-align: right; }
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .panel { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  textarea { min-height: 260px; }
+}
+
+/* ---------- Print: pages only ---------- */
+@media print {
+  html, body { background: #fff; }
+  .panel { display: none !important; }
+  .app { display: block; min-height: 0; }
+  .preview { padding: 0; background: #fff; }
+  .preview-inner { width: auto; zoom: 1 !important; }
+  .sheet { margin: 0; box-shadow: none; }
+}
+</style>
+<style id="page-rule">@page { size: letter; margin: 0; }</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <h1><small>Istari</small>Trial sheets</h1>
+
+    <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <label class="lbl" for="src">Problems</label>
+      <textarea id="src" spellcheck="false" aria-describedby="fmt"></textarea>
+    </div>
+
+    <details id="fmt">
+      <summary>Format</summary>
+<pre>title: Trial 3
+course: PHYS 311
+date: 30 October 2026
+note: Closed book. Show all work.
+---
+# Gauss's law
+points: 10
+Text with $inline$ math.
+$$\oint \vb E\cdot d\vb a=\frac{Q}{\epsilon_0}$$
+(a) First part.
+(b) Second part.
+---
+# Next problem
+...</pre>
+      <p class="hint">A line with three dashes starts a new problem. The first block is the header and is optional. A first line that starts with # is the problem title. Lists start with - or 1.</p>
+    </details>
+
+    <div class="opts">
+      <div>
+        <label class="lbl" for="paper">Paper</label>
+        <select id="paper"><option value="letter">US Letter</option><option value="a4">A4</option></select>
+      </div>
+      <div>
+        <label class="lbl" for="size">Text size</label>
+        <select id="size"><option value="11">11 pt</option><option value="12" selected>12 pt</option><option value="13">13 pt</option><option value="14">14 pt</option></select>
+      </div>
+      <div>
+        <label class="lbl" for="work">Work area</label>
+        <select id="work"><option value="blank">Blank</option><option value="ruled">Ruled</option><option value="grid">Dot grid</option></select>
+      </div>
+      <div style="align-self:end;display:flex;flex-direction:column;gap:6px">
+        <label class="check"><input type="checkbox" id="cover"> Cover page</label>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="cta" id="print" type="button">Save as PDF</button>
+      <button id="sample" type="button">Load example</button>
+      <button id="clear" type="button">Clear</button>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <p class="hint">In the print window, choose Save as PDF. Set the paper to match this page and turn off headers and footers. Use a browser that supports it (Chrome, Edge, Safari).</p>
+  </aside>
+
+  <main class="preview" id="preview"><div class="preview-inner" id="inner"></div></main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SAMPLE = String.raw`title: Trial 1 (example)
+course: PHYS 311
+date: 30 October 2026
+note: Closed book. One problem on each page. Show all of your work.
+---
+# Charged sphere
+points: 10
+A solid sphere of radius $R$ carries the volume charge density $\rho(r)=k\,r$, where $k$ is a constant.
+(a) Use Gauss's law to find $\vb E$ inside and outside the sphere.
+(b) Find the total energy stored in the field, using
+$$U=\frac{\epsilon_0}{2}\int E^2\,d\tau .$$
+---
+# Geodesics on a sphere
+points: 15
+The metric of a sphere of radius $R$ is $ds^2=R^2\left(d\theta^2+\sin^2\theta\,d\phi^2\right)$.
+(a) Find all nonzero Christoffel symbols $\Gamma^{\mu}_{\alpha\beta}$.
+(b) Show that the great circle $\phi=\text{const}$ solves the geodesic equation
+$$\ddot{x}^{\mu}+\Gamma^{\mu}_{\alpha\beta}\,\dot{x}^{\alpha}\dot{x}^{\beta}=0 .$$
+(c) Explain why the circle $\theta=\pi/4$ is **not** a geodesic.
+---
+# Gaussian integral
+points: 5
+Show that
+$$\int_{-\infty}^{\infty}e^{-x^2}\,dx=\sqrt{\pi}.$$
+Hint: square the integral and change to polar coordinates.
+`;
+
+  var KEY = 'istari-trial-sheets-v1';
+  var $ = function (id) { return document.getElementById(id); };
+  var src = $('src'), inner = $('inner'), statusEl = $('status'), preview = $('preview');
+  var ctl = { paper: $('paper'), size: $('size'), work: $('work'), cover: $('cover') };
+
+  var PAPERS = { letter: { w: 8.5, h: 11, css: 'letter', px: 816, pxh: 1056 }, a4: { w: 8.2677, h: 11.6929, css: 'A4', px: 794, pxh: 1123 } };
+
+  /* ---------- storage (optional) ---------- */
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (s && typeof s.text === 'string') {
+        src.value = s.text;
+        Object.keys(ctl).forEach(function (k) {
+          if (s.opts && k in s.opts) { if (ctl[k].type === 'checkbox') ctl[k].checked = !!s.opts[k]; else ctl[k].value = s.opts[k]; }
+        });
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  function save() {
+    try {
+      var o = {};
+      Object.keys(ctl).forEach(function (k) { o[k] = ctl[k].type === 'checkbox' ? ctl[k].checked : ctl[k].value; });
+      localStorage.setItem(KEY, JSON.stringify({ text: src.value, opts: o }));
+    } catch (e) {}
+  }
+
+  /* ---------- parsing ---------- */
+  var HEADER_KEYS = ['title', 'course', 'date', 'note', 'subtitle'];
+  function parse(text) {
+    var blocks = [], cur = [];
+    text.replace(/\r\n?/g, '\n').split('\n').forEach(function (line) {
+      if (/^\s*-{3,}\s*$/.test(line)) { blocks.push(cur.join('\n')); cur = []; } else cur.push(line);
+    });
+    blocks.push(cur.join('\n'));
+    var head = { title: '', course: '', date: '', note: '' };
+    var probs = [];
+    blocks.forEach(function (b, i) {
+      var t = b.replace(/^\s*\n+|\s+$/g, '');
+      if (!t) return;
+      if (i === 0 && isHeader(t)) {
+        t.split('\n').forEach(function (l) {
+          var m = l.match(/^\s*(\w+)\s*:\s*(.*)$/);
+          if (m) { var k = m[1].toLowerCase(); if (k === 'subtitle') k = 'note'; head[k] = m[2].trim(); }
+        });
+        return;
+      }
+      var lines = t.split('\n'), title = '', pts = '';
+      var m1 = lines[0].match(/^\s*#+\s*(.*)$/);
+      if (m1) { title = m1[1].trim(); lines.shift(); }
+      var m2 = lines.length && lines[0].match(/^\s*points?\s*:\s*(.+?)\s*$/i);
+      if (m2) { pts = m2[1]; lines.shift(); }
+      probs.push({ title: title, points: pts, body: lines.join('\n').replace(/^\s*\n+/, '') });
+    });
+    return { head: head, probs: probs };
+  }
+  function isHeader(t) {
+    var lines = t.split('\n').filter(function (l) { return l.trim(); });
+    return lines.length > 0 && lines.every(function (l) {
+      var m = l.match(/^\s*(\w+)\s*:/);
+      return m && HEADER_KEYS.indexOf(m[1].toLowerCase()) >= 0;
+    });
+  }
+
+  /* ---------- tiny Markdown + KaTeX ---------- */
+  var MACROS = { '\\R': '\\mathbb{R}', '\\C': '\\mathbb{C}', '\\N': '\\mathbb{N}', '\\Z': '\\mathbb{Z}', '\\vb': '\\mathbf{#1}', '\\dd': '\\,\\mathrm{d}' };
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function mathHtml(tex, display) {
+    if (window.katex) {
+      try { return window.katex.renderToString(tex, { displayMode: display, throwOnError: true, macros: Object.assign({}, MACROS), output: 'html' }); }
+      catch (e) { return '<span class="bad" title="' + esc(String(e.message || e)) + '">' + esc((display ? '$$' : '$') + tex + (display ? '$$' : '$')) + '</span>'; }
+    }
+    return '<code>' + esc(tex) + '</code>';
+  }
+  function Md() {
+    var store = [];
+    function stash(tex, display) { store.push(mathHtml(tex.trim(), display)); return '\u0001' + (store.length - 1) + '\u0001'; }
+    function inline(s) {
+      s = esc(s);
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+      s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/(^|[^*\w])\*(?!\s)([^*]+?)(?<!\s)\*(?![*\w])/g, '$1<em>$2</em>');
+      return s.replace(/\u0001(\d+)\u0001/g, function (_, n) { return store[+n]; });
+    }
+    return function (text) {
+      store = [];
+      text = text
+        .replace(/\$\$([\s\S]+?)\$\$/g, function (_, t) { return stash(t, true); })
+        .replace(/\\\[([\s\S]+?)\\\]/g, function (_, t) { return stash(t, true); })
+        .replace(/\\\(([\s\S]+?)\\\)/g, function (_, t) { return stash(t, false); })
+        .replace(/(^|[^\\$])\$([^\n$]+?)\$/g, function (_, pre, t) { return pre + stash(t, false); });
+      var items = [], cur = null, m;
+      function push() { if (cur) { items.push(cur); cur = null; } }
+      text.split('\n').forEach(function (raw) {
+        if (!raw.trim()) { push(); return; }
+        if ((m = raw.match(/^\s*\(([a-z]|[ivx]{1,4})\)\s+(.*)$/))) { push(); cur = { k: 'part', label: '(' + m[1] + ')', t: m[2] }; }
+        else if ((m = raw.match(/^\s*[-*]\s+(.*)$/))) { push(); cur = { k: 'ul', t: m[1] }; }
+        else if ((m = raw.match(/^\s*\d+[.)]\s+(.*)$/))) { push(); cur = { k: 'ol', t: m[1] }; }
+        else if (cur) { cur.t += ' ' + raw.trim(); }
+        else { cur = { k: 'p', t: raw.trim() }; }
+      });
+      push();
+      var html = '', i = 0;
+      while (i < items.length) {
+        var it = items[i];
+        if (it.k === 'ul' || it.k === 'ol') {
+          var li = '', j = i;
+          while (j < items.length && items[j].k === it.k) { li += '<li>' + inline(items[j].t) + '</li>'; j++; }
+          html += '<' + it.k + '>' + li + '</' + it.k + '>'; i = j;
+        } else if (it.k === 'part') {
+          html += '<div class="part"><span class="pl">' + it.label + '</span><div class="pt">' + inline(it.t) + '</div></div>'; i++;
+        } else { html += '<p>' + inline(it.t) + '</p>'; i++; }
+      }
+      return html;
+    };
+  }
+
+  /* ---------- build pages ---------- */
+  function build() {
+    var P = PAPERS[ctl.paper.value] || PAPERS.letter;
+    var root = document.documentElement.style;
+    root.setProperty('--pw', P.w + 'in');
+    root.setProperty('--ph', P.h + 'in');
+    root.setProperty('--fs', ctl.size.value + 'pt');
+    $('page-rule').textContent = '@page { size: ' + P.css + '; margin: 0; }';
+
+    var d = parse(src.value);
+    var md = Md();
+    var title = d.head.title || 'Trial sheet';
+    var n = d.probs.length;
+    var total = 0, anyPts = false;
+    d.probs.forEach(function (p) { var v = parseFloat(p.points); if (!isNaN(v)) { total += v; anyPts = true; } });
+
+    function ptsLabel(p) {
+      if (!p) return '';
+      var v = parseFloat(p), isNum = !isNaN(v) && /^[\d.]+$/.test(p.trim());
+      return isNum ? v + (v === 1 ? ' point' : ' points') : p;
+    }
+    function run(left) {
+      return '<div class="run"><span>' + esc(left) + '</span></div>';
+    }
+
+    var out = '';
+    var pageCount = 0;
+    if (ctl.cover.checked) {
+      pageCount++;
+      out += '<section class="sheet cover">' +
+        (d.head.course ? '<div class="c-course">' + esc(d.head.course) + '</div>' : '') +
+        '<h2>' + esc(title) + '</h2>' +
+        (d.head.date ? '<div class="c-date">' + esc(d.head.date) + '</div>' : '') +
+        '<div class="c-rule"></div>' +
+        (d.head.note ? '<div class="c-note">' + esc(d.head.note) + '</div>' : '') +
+        '<table><thead><tr><th class="n">Problem</th><th>Topic</th><th class="p">Points</th></tr></thead><tbody>' +
+        d.probs.map(function (p, i) {
+          return '<tr><td class="n">' + (i + 1) + '</td><td>' + esc(p.title || '') + '</td><td class="p">' + esc(p.points || '') + '</td></tr>';
+        }).join('') +
+        (anyPts ? '<tr><td></td><td style="text-align:right;color:var(--ink-muted)">Total</td><td class="p">' + total + '</td></tr>' : '') +
+        '</tbody></table>' +
+        '</section>';
+    }
+    d.probs.forEach(function (p, i) {
+      pageCount++;
+      var heads = '<span class="num">Problem ' + (i + 1) + '</span>' +
+        '<span class="ttl">' + esc(p.title) + '</span>' +
+        (p.points ? '<span class="pts">' + esc(ptsLabel(p.points)) + '</span>' : '');
+      out += '<section class="sheet prob" data-i="' + (i + 1) + '">' +
+        run([d.head.course, title].filter(Boolean).join('  ·  ')) +
+        '<div class="box"><div class="box-head">' + heads + '</div><div class="box-body">' + md(p.body) + '</div></div>' +
+        '<div class="work ' + (ctl.work.value === 'blank' ? '' : ctl.work.value) + '"></div>' +
+        '<div class="foot"><span>' + esc(title) + '</span><span>Problem ' + (i + 1) + ' of ' + n + '</span></div>' +
+        '</section>';
+    });
+    if (!out) out = '<section class="sheet"><div class="box"><div class="box-head"><span class="ttl">No problems yet</span></div><div class="box-body"><p>Type a problem in the box on the left. Put a line with three dashes between problems.</p></div></div></section>';
+    inner.innerHTML = out;
+
+    fit(P, n, total, anyPts);
+  }
+
+  function fit(P, n, total, anyPts) {
+    // Measure at full size, then scale the preview to the window width.
+    inner.style.zoom = 1;
+    var limit = P.pxh * 1.01, longs = [];
+    var sheets = inner.querySelectorAll('.sheet.prob');
+    for (var i = 0; i < sheets.length; i++) {
+      if (sheets[i].getBoundingClientRect().height > limit) longs.push(sheets[i].getAttribute('data-i'));
+    }
+    var avail = preview.clientWidth - 32;
+    var z = Math.min(1, Math.max(0.3, avail / P.px));
+    inner.style.zoom = z;
+    document.documentElement.style.setProperty('--z', z);
+
+    var parts = ['<b>' + n + '</b> problem' + (n === 1 ? '' : 's')];
+    if (anyPts) parts.push('<b>' + total + '</b> points');
+    var pages = inner.querySelectorAll('.sheet').length;
+    var s = parts.join(', ') + ', <b>' + pages + '</b> page' + (pages === 1 ? '' : 's') + ' (at least)';
+    if (longs.length) s += '<span class="warn">Problem ' + longs.join(', ') + ' is too long for one page. It continues on a second page. Shorten it or lower the text size.</span>';
+    statusEl.innerHTML = s;
+  }
+
+  /* ---------- events ---------- */
+  var timer = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(function () { build(); save(); }, 120); }
+  src.addEventListener('input', schedule);
+  Object.keys(ctl).forEach(function (k) { ctl[k].addEventListener('change', function () { build(); save(); }); });
+  $('print').addEventListener('click', function () { build(); window.print(); });
+  $('sample').addEventListener('click', function () { src.value = SAMPLE; build(); save(); });
+  $('clear').addEventListener('click', function () { src.value = ''; build(); save(); src.focus(); });
+  window.addEventListener('resize', function () { schedule(); });
+  window.addEventListener('beforeprint', function () { inner.style.zoom = 1; });
+  window.addEventListener('afterprint', function () { build(); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(build);
+
+  if (!load()) src.value = SAMPLE;
+  build();
+  window.__trial = { build: build, parse: parse };
+})();
+</script>
+</body>
+</html>
