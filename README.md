@@ -1,17 +1,14 @@
 # Gauntlet
 
-Gauntlet makes trial sheets: a printable PDF with one problem on each page.
-You paste a list of problems, and it sets each one in a titled box with room to work below it.
-The pages use the black and white print style of [Istari](https://github.com/TheScholium/istari).
+Gauntlet takes a list of problems and gives you a printable PDF with one problem on each page. It is one HTML file. It has no build step and no server.
 
-It is one HTML file. It has no build step and no server.
+The pages use the black and white print style of [Istari](https://github.com/TheScholium/istari).
 
 ## Use it
 
 Open the page, paste your problems into the box on the left, and click **Save as PDF**.
 In the print window, choose Save as PDF, set the paper size to match the page, and turn off headers and footers.
 
-If this repository has GitHub Pages turned on, the page is at
 `https://thescholium.github.io/gauntlet/`.
 You can also download `index.html` and open it in your browser.
 It needs an internet connection to load the math library and the fonts.
@@ -19,7 +16,7 @@ It needs an internet connection to load the math library and the fonts.
 ## Write the problems
 
 A line of three dashes (`---`) starts a new problem.
-The first block can be a header. It is optional.
+The first block can be a title page, but that is optional.
 
 ```
 title: Trial 3
