@@ -128,19 +128,30 @@ details pre { font-family: var(--mono); font-size: 12px; background: var(--bg); 
 .work {
   flex: 1; min-height: 3in; position: relative;
 }
-.work.ruled { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(.34in - 0.6pt), var(--p-rule) calc(.34in - 0.6pt), var(--p-rule) .34in); background-position: 0 .1in; }
-.work.grid { background-image: radial-gradient(circle, var(--p-rule) 0.7pt, transparent 0.9pt); background-size: .25in .25in; background-position: .12in .12in; }
-.sheet .foot {
-  display: flex; justify-content: space-between; gap: .3in;
-  border-top: .5pt solid var(--p-rule); padding-top: .07in;
-  font-size: .8em; color: var(--ink-faint); font-variant-numeric: lining-nums;
+/* --s is the scale of the work-area patterns: 1 normally, 2/3 with the "2/3 scale" option */
+.work { --s: 1; }
+.work.tight { --s: 0.6667; }
+.work.ruled {
+  --step: calc(.34in * var(--s));
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--step) - 0.6pt), var(--p-rule) calc(var(--step) - 0.6pt), var(--p-rule) var(--step));
+  background-position: 0 calc(.1in * var(--s));
+}
+.work.grid {
+  --step: calc(.25in * var(--s));
+  background-image: radial-gradient(circle, var(--p-rule) 0.7pt, transparent 0.9pt);
+  background-size: var(--step) var(--step); background-position: calc(.12in * var(--s)) calc(.12in * var(--s));
+}
+.work.lines {
+  --step: calc(.25in * var(--s));
+  background-image: linear-gradient(to bottom, var(--p-rule) 0, var(--p-rule) 0.6pt, transparent 0.6pt), linear-gradient(to right, var(--p-rule) 0, var(--p-rule) 0.6pt, transparent 0.6pt);
+  background-size: var(--step) var(--step); background-position: 0 0;
 }
 
 /* Cover */
 .cover { justify-content: flex-start; }
-.cover .c-course { margin-top: 1.3in; font-variant: small-caps; letter-spacing: .16em; color: var(--p-gold); font-size: 1.1em; }
-.cover h2 { font-family: var(--display); font-weight: 600; font-size: 3em; line-height: 1.05; margin: .1em 0 .15em; color: var(--ink); }
-.cover .c-date { color: var(--ink-muted); font-style: italic; }
+.cover h2 { font-family: var(--display); font-weight: 600; font-size: 3em; line-height: 1.05; margin: 1.3in 0 .15em; color: var(--ink); }
+.cover h2 .katex { font-size: 1em; }
+.cover .c-course { font-variant: small-caps; letter-spacing: .16em; color: var(--p-gold); font-size: 1.1em; }
 .cover .c-rule { height: 1pt; background: var(--p-gold); margin: .3in 0 .25in; width: 100%; }
 .cover .c-note { color: var(--ink-muted); margin-bottom: .25in; max-width: 5.2in; }
 .cover table { border-collapse: collapse; width: 100%; font-size: 1em; }
@@ -211,10 +222,11 @@ $$\oint \vb E\cdot d\vb a=\frac{Q}{\epsilon_0}$$
       </div>
       <div>
         <label class="lbl" for="work">Work area</label>
-        <select id="work"><option value="blank">Blank</option><option value="ruled">Ruled</option><option value="grid">Dot grid</option></select>
+        <select id="work"><option value="blank">Blank</option><option value="ruled">Ruled</option><option value="grid">Dot grid</option><option value="lines">Lined grid</option></select>
       </div>
       <div style="align-self:end;display:flex;flex-direction:column;gap:6px">
         <label class="check"><input type="checkbox" id="cover"> Cover page</label>
+        <label class="check"><input type="checkbox" id="tight"> Pattern at 2/3 scale</label>
       </div>
     </div>
 
@@ -264,7 +276,7 @@ Hint: square the integral and change to polar coordinates.
   var KEY = 'istari-trial-sheets-v1';
   var $ = function (id) { return document.getElementById(id); };
   var src = $('src'), inner = $('inner'), statusEl = $('status'), preview = $('preview');
-  var ctl = { paper: $('paper'), size: $('size'), work: $('work'), cover: $('cover') };
+  var ctl = { paper: $('paper'), size: $('size'), work: $('work'), cover: $('cover'), tight: $('tight') };
 
   var PAPERS = { letter: { w: 8.5, h: 11, css: 'letter', px: 816, pxh: 1056 }, a4: { w: 8.2677, h: 11.6929, css: 'A4', px: 794, pxh: 1123 } };
 
@@ -337,6 +349,12 @@ Hint: square the integral and change to polar coordinates.
     }
     return '<code>' + esc(tex) + '</code>';
   }
+  // Problem titles: plain text with optional $inline$ math.
+  function titleHtml(s) {
+    return String(s).split(/(\$[^$\n]+?\$)/).map(function (part, i) {
+      return i % 2 ? mathHtml(part.slice(1, -1).trim(), false) : esc(part);
+    }).join('');
+  }
   function Md() {
     var store = [];
     function stash(tex, display) { store.push(mathHtml(tex.trim(), display)); return '\u0001' + (store.length - 1) + '\u0001'; }
@@ -389,6 +407,7 @@ Hint: square the integral and change to polar coordinates.
     root.setProperty('--fs', ctl.size.value + 'pt');
     $('page-rule').textContent = '@page { size: ' + P.css + '; margin: 0; }';
 
+    ctl.tight.disabled = ctl.work.value === 'blank';  // the scale applies only to patterns
     var d = parse(src.value);
     var md = Md();
     var title = d.head.title || 'Trial sheet';
@@ -414,15 +433,18 @@ Hint: square the integral and change to polar coordinates.
     var pageCount = 0;
     if (ctl.cover.checked) {
       pageCount++;
+      // Order: title, course and date on one line, rule, note, linked table of contents.
+      // The Points column appears only when at least one problem has points.
+      var courseLine = [d.head.course, d.head.date].filter(Boolean).join(', ');
       out += '<section class="sheet cover" id="contents">' +
-        (d.head.course ? '<div class="c-course">' + esc(d.head.course) + '</div>' : '') +
-        '<h2>' + esc(title) + '</h2>' +
-        (d.head.date ? '<div class="c-date">' + esc(d.head.date) + '</div>' : '') +
+        '<h2>' + titleHtml(title) + '</h2>' +
+        (courseLine ? '<div class="c-course">' + esc(courseLine) + '</div>' : '') +
         '<div class="c-rule"></div>' +
         (d.head.note ? '<div class="c-note">' + esc(d.head.note) + '</div>' : '') +
-        '<table><thead><tr><th class="n">Problem</th><th>Topic</th><th class="p">Points</th></tr></thead><tbody>' +
+        '<table><thead><tr><th class="n">Problem</th><th>Topic</th>' + (anyPts ? '<th class="p">Points</th>' : '') + '</tr></thead><tbody>' +
         d.probs.map(function (p, i) {
-          return '<tr><td class="n">' + link(i, i + 1) + '</td><td>' + (p.title ? link(i, esc(p.title)) : '') + '</td><td class="p">' + esc(p.points || '') + '</td></tr>';
+          return '<tr><td class="n">' + link(i, i + 1) + '</td><td>' + (p.title ? link(i, titleHtml(p.title)) : '') + '</td>' +
+            (anyPts ? '<td class="p">' + esc(p.points || '') + '</td>' : '') + '</tr>';
         }).join('') +
         (anyPts ? '<tr><td></td><td style="text-align:right;color:var(--ink-muted)">Total</td><td class="p">' + total + '</td></tr>' : '') +
         '</tbody></table>' +
@@ -431,13 +453,12 @@ Hint: square the integral and change to polar coordinates.
     d.probs.forEach(function (p, i) {
       pageCount++;
       var heads = '<span class="num">Problem ' + (i + 1) + '</span>' +
-        '<span class="ttl">' + esc(p.title) + '</span>' +
+        '<span class="ttl">' + titleHtml(p.title) + '</span>' +
         (p.points ? '<span class="pts">' + esc(ptsLabel(p.points)) + '</span>' : '');
       out += '<section class="sheet prob" id="problem-' + (i + 1) + '" data-i="' + (i + 1) + '">' +
         run([d.head.course, title].filter(Boolean).join('  ·  '), ctl.cover.checked) +
         '<div class="box"><div class="box-head">' + heads + '</div><div class="box-body">' + md(p.body) + '</div></div>' +
-        '<div class="work ' + (ctl.work.value === 'blank' ? '' : ctl.work.value) + '"></div>' +
-        '<div class="foot"><span>' + esc(title) + '</span><span>Problem ' + (i + 1) + ' of ' + n + '</span></div>' +
+        '<div class="work' + (ctl.work.value === 'blank' ? '' : ' ' + ctl.work.value + (ctl.tight.checked ? ' tight' : '')) + '"></div>' +
         '</section>';
     });
     if (!out) out = '<section class="sheet"><div class="box"><div class="box-head"><span class="ttl">No problems yet</span></div><div class="box-body"><p>Type a problem in the box on the left. Put a line with three dashes between problems.</p></div></div></section>';

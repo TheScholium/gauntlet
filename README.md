@@ -51,7 +51,7 @@ Short macros are available: `\R`, `\C`, `\N`, `\Z` (number sets), `\vb E` (bold 
 
 - **Paper**: US Letter or A4.
 - **Text size**: 11 to 14 pt.
-- **Work area**: blank, ruled, or dot grid.
+- **Work area**: blank, ruled, dot grid, or lined grid. The "Pattern at 2/3 scale" option makes the lines or dots 2/3 as far apart.
 - **Cover page**: a title page with a table of the problems and the total points. In the saved PDF, each problem on the title page is a link to its page, and each problem page has a Contents link back to the title page.
 
 If a problem is too long for one page, it continues on a second page, and the panel shows a warning.
