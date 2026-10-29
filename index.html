@@ -52,7 +52,7 @@ body { font-size: 17px; line-height: 1.5; }
 }
 .panel h1 { font-family: var(--display); font-weight: 600; font-size: 28px; margin: 0; color: var(--text-bright); letter-spacing: .01em; }
 .panel h1 small { display: block; font-family: var(--serif); font-size: 14px; font-weight: 400; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-label.lbl { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 4px; }
+.lbl { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 4px; }
 textarea {
   width: 100%; min-height: 320px; flex: 1;
   background: var(--bg); color: var(--text); border: 1px solid var(--line);
@@ -82,6 +82,18 @@ details { font-size: 15px; color: var(--muted); }
 details summary { cursor: pointer; color: var(--text); }
 details pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); padding: 10px; margin: 8px 0 0; white-space: pre-wrap; color: var(--text); }
 .hint { font-size: 14px; color: var(--muted); }
+.hint code { font-family: var(--mono); font-size: 12px; color: var(--text); }
+
+/* Figure library (side panel) */
+.figs { display: flex; flex-direction: column; gap: 8px; border: 1px dashed transparent; margin: -6px; padding: 6px; }
+.figs.drop { border-color: var(--gold); background: rgba(196, 162, 77, .07); }
+.figs .row button { font-size: 14px; padding: 5px 10px; }
+.figlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 170px; overflow-y: auto; }
+.figlist li { display: flex; align-items: center; gap: 8px; font-size: 14px; border-bottom: 1px solid var(--line); padding: 3px 0; }
+.figlist .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; color: var(--text); }
+.figlist .fs { color: var(--muted); white-space: nowrap; }
+.figlist button { font-size: 13px; padding: 1px 8px; }
+.figs .msg { color: var(--warn); font-size: 14px; margin: 0; }
 
 .preview { padding: 24px max(16px, env(safe-area-inset-right, 0px)); min-width: 0; background: #0d0c0a; }
 .preview-inner { width: max-content; margin: 0 auto; }
@@ -124,6 +136,11 @@ details pre { font-family: var(--mono); font-size: 12px; background: var(--bg); 
 .box-body .katex { font-size: 1.04em; }
 .box-body .katex-display { margin: .5em 0; }
 .box-body .bad { color: #964234; font-family: var(--mono); font-size: .8em; }
+/* Figures: a line with ![description](file.png) */
+.box-body figure.fig { margin: .3em 0 .6em; text-align: center; break-inside: avoid; }
+.box-body figure.fig img { max-width: 100%; max-height: 3.2in; width: auto; height: auto; object-fit: contain; vertical-align: top; }
+.box-body figure.fig img.sized { max-height: none; }
+.box-body figure.fig.missing { text-align: left; color: #964234; font-family: var(--mono); font-size: .8em; border: 1pt dashed #964234; padding: .3em .5em; }
 
 .work {
   flex: 1; min-height: 3in; position: relative;
@@ -205,11 +222,24 @@ Text with $inline$ math.
 $$\oint \vb E\cdot d\vb a=\frac{Q}{\epsilon_0}$$
 (a) First part.
 (b) Second part.
+![Circuit diagram](fig1.png)
 ---
 # Next problem
 ...</pre>
-      <p class="hint">A line with three dashes starts a new problem. The first block is the header and is optional. A first line that starts with # is the problem title. Lists start with - or 1.</p>
+      <p class="hint">A line with three dashes starts a new problem. The first block is the header and is optional. A first line that starts with # is the problem title. Lists start with - or 1. A line that holds only a picture, <code>![description](file.png)</code>, shows a figure. Add <code>{width=50%}</code> after it to set the width.</p>
     </details>
+
+    <section class="figs" id="figs" aria-label="Figures">
+      <div class="lbl">Figures</div>
+      <div class="row">
+        <button type="button" id="figadd">Add figures</button>
+        <button type="button" id="figclear">Remove all</button>
+      </div>
+      <input type="file" id="figfile" accept="image/*" multiple hidden>
+      <ul class="figlist" id="figlist"></ul>
+      <p class="msg" id="figmsg" role="status" aria-live="polite" hidden></p>
+      <p class="hint">Drop image files here, or use the button. Then write the file name in a problem, for example <code>![Circuit](fig1.png)</code>, on a line by itself. The files stay in this browser.</p>
+    </section>
 
     <div class="opts">
       <div>
@@ -355,6 +385,32 @@ Hint: square the integral and change to polar coordinates.
       return i % 2 ? mathHtml(part.slice(1, -1).trim(), false) : esc(part);
     }).join('');
   }
+  function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+
+  /* ---------- figures ---------- */
+  // A figure is a line that holds only ![description](source), with an optional {width=40%}.
+  // The source is a web address, a data:image address, or the name of a file in the figure library.
+  var FIGS = {};  // library: lower-case file name -> { name, blob, url, size }
+  var FIG_RE = /^\s*!\[([^\]]*)\]\(\s*([^()\s]+)\s*\)(?:\{\s*width\s*=\s*(\d{1,3})\s*%\s*\})?\s*$/;
+  function figKey(name) {
+    var n = String(name);
+    try { n = decodeURIComponent(n); } catch (e) {}
+    return n.split(/[\\/]/).pop().trim().toLowerCase();  // a folder in front of the name is ignored
+  }
+  function figSrc(ref) {
+    if (/^https?:\/\//i.test(ref) || /^data:image\/(png|jpe?g|gif|webp|svg\+xml)[;,]/i.test(ref)) return ref;
+    var f = FIGS[figKey(ref)];
+    return f ? f.url : null;
+  }
+  function figHtml(it) {
+    var shown = it.src.length > 60 ? it.src.slice(0, 57) + '...' : it.src;
+    var src = figSrc(it.src);
+    if (!src) return '<figure class="fig missing" data-ref="' + escAttr(shown) + '">Figure not found: ' + esc(shown) + '</figure>';
+    var w = it.w ? Math.min(100, Math.max(5, +it.w)) : 0;
+    return '<figure class="fig"><img src="' + escAttr(src) + '" alt="' + escAttr(it.alt) + '" data-ref="' + escAttr(shown) + '"' +
+      (w ? ' class="sized" style="width:' + w + '%"' : '') + ' referrerpolicy="no-referrer"></figure>';
+  }
+
   function Md() {
     var store = [];
     function stash(tex, display) { store.push(mathHtml(tex.trim(), display)); return '\u0001' + (store.length - 1) + '\u0001'; }
@@ -376,7 +432,8 @@ Hint: square the integral and change to polar coordinates.
       function push() { if (cur) { items.push(cur); cur = null; } }
       text.split('\n').forEach(function (raw) {
         if (!raw.trim()) { push(); return; }
-        if ((m = raw.match(/^\s*\(([a-z]|[ivx]{1,4})\)\s+(.*)$/))) { push(); cur = { k: 'part', label: '(' + m[1] + ')', t: m[2] }; }
+        if ((m = raw.match(FIG_RE))) { push(); items.push({ k: 'fig', alt: m[1].replace(/\u0001\d+\u0001/g, ''), src: m[2], w: m[3] }); }
+        else if ((m = raw.match(/^\s*\(([a-z]|[ivx]{1,4})\)\s+(.*)$/))) { push(); cur = { k: 'part', label: '(' + m[1] + ')', t: m[2] }; }
         else if ((m = raw.match(/^\s*[-*]\s+(.*)$/))) { push(); cur = { k: 'ul', t: m[1] }; }
         else if ((m = raw.match(/^\s*\d+[.)]\s+(.*)$/))) { push(); cur = { k: 'ol', t: m[1] }; }
         else if (cur) { cur.t += ' ' + raw.trim(); }
@@ -390,6 +447,8 @@ Hint: square the integral and change to polar coordinates.
           var li = '', j = i;
           while (j < items.length && items[j].k === it.k) { li += '<li>' + inline(items[j].t) + '</li>'; j++; }
           html += '<' + it.k + '>' + li + '</' + it.k + '>'; i = j;
+        } else if (it.k === 'fig') {
+          html += figHtml(it); i++;
         } else if (it.k === 'part') {
           html += '<div class="part"><span class="pl">' + it.label + '</span><div class="pt">' + inline(it.t) + '</div></div>'; i++;
         } else { html += '<p>' + inline(it.t) + '</p>'; i++; }
@@ -464,8 +523,10 @@ Hint: square the integral and change to polar coordinates.
     if (!out) out = '<section class="sheet"><div class="box"><div class="box-head"><span class="ttl">No problems yet</span></div><div class="box-body"><p>Type a problem in the box on the left. Put a line with three dashes between problems.</p></div></div></section>';
     inner.innerHTML = out;
 
+    lastFit = [P, n, total, anyPts];
     fit(P, n, total, anyPts);
   }
+  var lastFit = null;
 
   function fit(P, n, total, anyPts) {
     // Measure at full size, then scale the preview to the window width.
@@ -484,9 +545,81 @@ Hint: square the integral and change to polar coordinates.
     if (anyPts) parts.push('<b>' + total + '</b> points');
     var pages = inner.querySelectorAll('.sheet').length;
     var s = parts.join(', ') + ', <b>' + pages + '</b> page' + (pages === 1 ? '' : 's') + ' (at least)';
-    if (longs.length) s += '<span class="warn">Problem ' + longs.join(', ') + ' is too long for one page. It continues on a second page. Shorten it or lower the text size.</span>';
+    if (longs.length) s += '<span class="warn">Problem ' + longs.join(', ') + ' is too long for one page. It continues on a second page. Shorten it, make a figure smaller, or lower the text size.</span>';
+    var miss = inner.querySelectorAll('figure.fig.missing'), names = [];
+    for (var k = 0; k < miss.length; k++) {
+      var nm = miss[k].getAttribute('data-ref');
+      if (names.indexOf(nm) < 0) names.push(nm);
+    }
+    if (names.length) s += '<span class="warn">A figure is missing or does not load: ' + names.map(esc).join(', ') + '. Add the file under Figures, or check the address.</span>';
     statusEl.innerHTML = s;
   }
+
+  /* ---------- figure library (kept in the browser with IndexedDB) ---------- */
+  var DB = null;
+  var figList = $('figlist'), figMsg = $('figmsg'), figBox = $('figs'), figFile = $('figfile');
+  var IMG_OK = /^image\/(png|jpe?g|gif|webp|svg\+xml)$/;
+  function say(text) { figMsg.textContent = text || ''; figMsg.hidden = !text; }
+  function dbOpen(done) {
+    var ended = false;
+    function end() { if (!ended) { ended = true; done(); } }
+    try {
+      var rq = indexedDB.open('istari-trial-sheets-figs', 1);
+      rq.onupgradeneeded = function () { rq.result.createObjectStore('figs', { keyPath: 'key' }); };
+      rq.onsuccess = function () { DB = rq.result; end(); };
+      rq.onerror = rq.onblocked = function () { end(); };
+    } catch (e) { end(); }
+  }
+  function dbWrite(fn, failMsg) {
+    if (!DB) return;
+    try {
+      var tx = DB.transaction('figs', 'readwrite');
+      fn(tx.objectStore('figs'));
+      tx.onabort = tx.onerror = function () { say(failMsg); };
+    } catch (e) { say(failMsg); }
+  }
+  function putMem(key, name, blob) {
+    if (FIGS[key]) URL.revokeObjectURL(FIGS[key].url);
+    FIGS[key] = { name: name, blob: blob, url: URL.createObjectURL(blob), size: blob.size };
+  }
+  function dbLoad(done) {
+    if (!DB) { say('The browser does not allow storage here. Figures stay only until you close this page.'); return done(); }
+    try {
+      var rq = DB.transaction('figs', 'readonly').objectStore('figs').getAll();
+      rq.onsuccess = function () { (rq.result || []).forEach(function (r) { putMem(r.key, r.name, r.blob); }); done(); };
+      rq.onerror = function () { done(); };
+    } catch (e) { done(); }
+  }
+  function fmtSize(n) { return n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
+  function renderFigList() {
+    figList.textContent = '';
+    Object.keys(FIGS).sort().forEach(function (key) {
+      var f = FIGS[key], li = document.createElement('li'), a = document.createElement('span'),
+          b = document.createElement('span'), r = document.createElement('button');
+      a.className = 'fn'; a.textContent = f.name; a.title = f.name;
+      b.className = 'fs'; b.textContent = fmtSize(f.size);
+      r.type = 'button'; r.textContent = 'Remove'; r.setAttribute('aria-label', 'Remove ' + f.name);
+      r.addEventListener('click', function () {
+        URL.revokeObjectURL(f.url); delete FIGS[key];
+        dbWrite(function (s) { s.delete(key); }, 'The browser could not remove "' + f.name + '".');
+        renderFigList(); build();
+      });
+      li.appendChild(a); li.appendChild(b); li.appendChild(r); figList.appendChild(li);
+    });
+    $('figclear').disabled = !Object.keys(FIGS).length;
+  }
+  function addFigs(files) {
+    var skipped = [];
+    Array.prototype.forEach.call(files, function (f) {
+      if (!IMG_OK.test(f.type)) { skipped.push(f.name); return; }
+      var key = figKey(f.name);
+      putMem(key, f.name, f);
+      dbWrite(function (s) { s.put({ key: key, name: f.name, blob: f }); }, 'The browser could not save "' + f.name + '". It stays only until you close this page.');
+    });
+    say(skipped.length ? 'Skipped (not a PNG, JPEG, GIF, WebP or SVG image): ' + skipped.join(', ') + '.' : '');
+    renderFigList(); build();
+  }
+  function hasFiles(e) { var t = e.dataTransfer && e.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
 
   /* ---------- events ---------- */
   var timer = null;
@@ -497,13 +630,51 @@ Hint: square the integral and change to polar coordinates.
   $('sample').addEventListener('click', function () { src.value = SAMPLE; build(); save(); });
   $('clear').addEventListener('click', function () { src.value = ''; build(); save(); src.focus(); });
   window.addEventListener('resize', function () { schedule(); });
+
+  // Pictures load after the page is built, so measure the pages again when each one arrives.
+  // This must not rebuild the pages: a rebuild would reload the pictures and start a loop.
+  var fitTimer = null;
+  function refit() { clearTimeout(fitTimer); fitTimer = setTimeout(function () { if (lastFit) fit.apply(null, lastFit); }, 30); }
+  inner.addEventListener('load', refit, true);
+  inner.addEventListener('error', function (e) {
+    var img = e.target;
+    if (img && img.tagName === 'IMG' && img.parentNode) {
+      var fig = img.parentNode, ref = img.getAttribute('data-ref') || '';
+      fig.className = 'fig missing'; fig.setAttribute('data-ref', ref);
+      fig.textContent = 'Figure could not be loaded: ' + ref;
+    }
+    refit();
+  }, true);
+
+  $('figadd').addEventListener('click', function () { figFile.click(); });
+  figFile.addEventListener('change', function () { addFigs(figFile.files); figFile.value = ''; });
+  $('figclear').addEventListener('click', function () {
+    Object.keys(FIGS).forEach(function (k) { URL.revokeObjectURL(FIGS[k].url); });
+    FIGS = {};
+    dbWrite(function (s) { s.clear(); }, 'The browser could not remove the files.');
+    say(''); renderFigList(); build();
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; figBox.classList.add('drop');
+    });
+  });
+  document.addEventListener('dragleave', function (e) { if (!e.relatedTarget) figBox.classList.remove('drop'); });
+  document.addEventListener('drop', function (e) {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); figBox.classList.remove('drop');
+    addFigs(e.dataTransfer.files);
+  });
   window.addEventListener('beforeprint', function () { inner.style.zoom = 1; });
   window.addEventListener('afterprint', function () { build(); });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(build);
 
   if (!load()) src.value = SAMPLE;
+  renderFigList();
   build();
-  window.__trial = { build: build, parse: parse };
+  dbOpen(function () { dbLoad(function () { renderFigList(); build(); }); });
+  window.__trial = { build: build, parse: parse, addFigs: addFigs };
 })();
 </script>
 </body>

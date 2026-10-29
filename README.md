@@ -44,8 +44,31 @@ $$U=\frac{\epsilon_0}{2}\int E^2\,d\tau$$
 | Lists | Lines that start with `-` or `1.` |
 | Emphasis | `**bold**`, `*italic*`, `` `code` `` |
 | Math | `$inline$` and `$$display$$`, rendered with KaTeX |
+| Figures | A line that holds only `![description](file.png)`. See [Figures](#figures) |
 
 Short macros are available: `\R`, `\C`, `\N`, `\Z` (number sets), `\vb E` (bold vector), and `\dd` (a thin space and an upright d).
+Write `\dd` in front of the variable: `\int E^2\,\dd\tau`.
+
+## Figures
+
+Put a figure on a line of its own:
+
+```
+![Circuit with two resistors](circuit.png)
+```
+
+Add `{width=50%}` after the line to set the width. Without it, a figure keeps its own size, up to the width of the box and a height of 3.2 in.
+
+The name in the brackets is a file. To give Gauntlet the file:
+
+1. Drop the image files on the page, or click **Add figures**. PNG, JPEG, GIF, WebP and SVG files work.
+2. Write the file name in the problem. Upper and lower case do not matter. A folder in front of the name is ignored.
+
+Gauntlet keeps the files in your browser, so they are there when you come back. **Remove** deletes one file. **Remove all** deletes all of them.
+If a file is not in the list, the preview shows a red box, and the panel names the missing file.
+
+You can use a web address (`https://...`) or a `data:image/...` address in place of a file name. A web address makes your browser ask that site for the picture.
+A figure must be alone on its line. It cannot sit inside a sentence.
 
 ## Options
 
@@ -60,11 +83,14 @@ If a problem is too long for one page, it continues on a second page, and the pa
 
 Your problems stay in your browser. The page does not send them anywhere.
 It saves your last text and options in the browser's local storage, so that they are there when you come back.
+It saves your figure files in the browser's IndexedDB. Use **Remove all** to delete them.
 The page loads the KaTeX library from cdnjs and the fonts from Google Fonts.
+A figure with a web address is the one case where the browser contacts another site.
 
 ## Limits
 
-- The page does not draw figures. Add a figure by hand after you save the PDF.
+- The page does not draw figures. It shows picture files that you give it (see [Figures](#figures)).
+- A figure is always centered on its own line. It cannot sit beside text or beside another figure.
 - It does not read problems from an image or a PDF. Write them as text, or ask for an image mode.
 - Tested in Chromium. Safari and Firefox are not tested.
 
